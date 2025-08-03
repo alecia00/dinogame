@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Dino Bonus Code Game</title>
+  <title>Dino Game + Soundboard (Volume Floating)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     html, body {
@@ -60,6 +60,38 @@
       box-shadow: 0 3px 18px #ececec93; border: 1.2px solid #ececec; z-index: 15;
       display: none; pointer-events: none; user-select: text; text-align: center;
     }
+    /* VOLUME CONTROL FLOATING KANAN ATAS */
+    #soundControlBox {
+      position: fixed;
+      top: 20px;
+      right: 22px;
+      z-index: 999;
+      background: rgba(255,255,255,0.98);
+      border-radius: 9px;
+      box-shadow: 0 2px 10px #e5e5e577;
+      padding: 5px 13px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      user-select: none;
+      border: 1.1px solid #f0f0f0;
+    }
+    #soundControlBox button {
+      border: none;
+      background: none;
+      font-size: 20px;
+      cursor: pointer;
+      padding: 1px 3px;
+      color: #333;
+      border-radius: 4px;
+      transition: background 0.14s;
+    }
+    #soundControlBox button:active { background: #ededed; }
+    #volumeRange {
+      width: 60px;
+      accent-color: #845eed;
+      vertical-align: middle;
+    }
     @media (max-width: 800px) {
       #gameArea {max-width: 99vw; height: 44vh; min-height: 150px;}
       #bannerImg {height: 32px;}
@@ -68,6 +100,8 @@
       #bannerSub {font-size: 13px;}
       #scoreBox {font-size: 16px;}
       #codeMsg {font-size: 16px;}
+      #soundControlBox {padding: 3px 7px; top: 10px; right: 5px;}
+      #volumeRange {width: 40px;}
     }
   </style>
 </head>
@@ -89,9 +123,15 @@
   </div>
   <div id="codeMsg"></div>
 </div>
+<!-- VOLUME CONTROL FLOATING (di luar area game!) -->
+<div id="soundControlBox">
+  <button id="volDown" title="Volume -">🔉</button>
+  <input id="volumeRange" type="range" min="0" max="100" value="70" />
+  <button id="volUp" title="Volume +">🔊</button>
+</div>
 
 <script>
-  // ASSET
+  // ======= ASSETS (GAME)
   const canvas = document.getElementById('gameCanvas');
   const ctx = canvas.getContext('2d');
   const scoreBox = document.getElementById('scoreBox');
@@ -104,13 +144,48 @@
   const cactusImg = new Image();
   cactusImg.src = "katkus.png";
 
-  // VARIABEL
+  // ====== SOUND BOARD ======
+  const backsound = new Audio("backsound.mp3");
+  backsound.loop = true;
+  backsound.preload = "auto";
+  backsound.volume = 0.7;
+
+  const jumpSound = new Audio("jump.mp3");
+  jumpSound.preload = "auto";
+  jumpSound.volume = 0.7;
+
+  const rewardSound = new Audio("reward.mp3");
+  rewardSound.preload = "auto";
+  rewardSound.volume = 0.7;
+
+  const gameoverSound = new Audio("gameover.mp3");
+  gameoverSound.preload = "auto";
+  gameoverSound.volume = 0.7;
+
+  // Volume control UI
+  let volume = 0.7;
+  const volRange = document.getElementById("volumeRange");
+  const volDown = document.getElementById("volDown");
+  const volUp = document.getElementById("volUp");
+  function setAllVolume(val) {
+    volume = Math.max(0, Math.min(1, val));
+    backsound.volume = volume;
+    jumpSound.volume = volume;
+    rewardSound.volume = volume;
+    gameoverSound.volume = volume;
+    volRange.value = Math.round(volume*100);
+  }
+  volRange.addEventListener('input', e => setAllVolume(e.target.value/100));
+  volDown.addEventListener('click', ()=> setAllVolume(volume-0.12));
+  volUp.addEventListener('click', ()=> setAllVolume(volume+0.12));
+
+  // ======= VARIABEL GAME
   let W = 900, H = 300, groundY = 240;
   let dino = {}, obstacles = [], score = 0, isDead = false, gameStarted = false;
   let lastObstacle = 0, obsInterval = 2000, obsSpeed = 2.0;
-  let gravity = 0.38, jumpPower = 13.0;
+  let gravity = 0.35, jumpPower = 11.8;
   let jumpSuccess = 0;
-  let logoBonus = null; // logo "bonus" yang muncul tiap 4 sukses
+  let logoBonus = null;
 
   function resizeCanvas() {
     const ga = document.getElementById('gameArea');
@@ -143,6 +218,8 @@
     gameOverBox.style.display = "none";
     codeMsg.style.display = "none";
     drawStart();
+    backsound.pause();
+    backsound.currentTime = 0;
   }
 
   function drawDinoGif(x, y) {
@@ -190,6 +267,8 @@
     let kode = randomCode(8);
     codeMsg.innerHTML = `🥳 congrats "<b>${kode}</b>" welcome`;
     codeMsg.style.display = "block";
+    rewardSound.currentTime = 0;
+    rewardSound.play();
     setTimeout(()=>{ codeMsg.style.display = "none"; }, 2200);
   }
 
@@ -210,7 +289,6 @@
     if (logoBonus && logoBonus.active) {
       drawLogoBonus(logoBonus);
       logoBonus.x -= obsSpeed;
-      // Collision dino & bonus logo
       if (
         dino.x + dino.w - 20 > logoBonus.x &&
         dino.x + 20 < logoBonus.x + logoBonus.w &&
@@ -220,7 +298,6 @@
         logoBonus.active = false;
         showCongratsCode();
       }
-      // Hilang jika keluar layar
       if (logoBonus.x < -logoBonus.w) logoBonus.active = false;
     }
 
@@ -234,7 +311,6 @@
       obsInterval = 1200 + Math.random() * 1200;
     }
 
-    // Dino lompat/jatuh
     if (dino.isJump) {
       dino.y += dino.vy;
       dino.vy += gravity;
@@ -244,7 +320,6 @@
       }
     }
 
-    // Dino tabrak kaktus = game over
     for (let obs of obstacles) {
       if (
         dino.x + dino.w - 20 > obs.x &&
@@ -254,17 +329,18 @@
         isDead = true;
         gameOverBox.style.display = "block";
         codeMsg.style.display = "none";
+        backsound.pause();
+        gameoverSound.currentTime = 0;
+        gameoverSound.play();
       }
     }
 
-    // Skor & SUKSES LOMPAT
     for (let obs of obstacles) {
       if (!obs.counted && obs.x + obs.w < dino.x + 5) {
         score++;
         obs.counted = true;
         scoreBox.textContent = score;
         jumpSuccess++;
-        // Setiap 4x sukses, logo bonus muncul
         if (jumpSuccess % 4 === 0) {
           logoBonus = {
             x: dino.x + 220,
@@ -294,11 +370,16 @@
       codeMsg.style.display = "none";
       isDead = false;
       gameOverBox.style.display = "none";
+      // === START BACKSOUND ===
+      backsound.currentTime = 0;
+      backsound.play();
       requestAnimationFrame(gameLoop);
     }
     if (!isDead && !dino.isJump && gameStarted) {
       dino.isJump = true;
       dino.vy = -jumpPower;
+      jumpSound.currentTime = 0;
+      jumpSound.play();
     } else if (isDead) {
       resetGame();
     }
@@ -316,6 +397,10 @@
   logoImg.onload = checkReady;
   cactusImg.onload = checkReady;
   if (dinoGif.complete && logoImg.complete && cactusImg.complete) { resetGame(); resizeCanvas(); }
+
+  // === Stop backsound jika user keluar/jeda ===
+  window.addEventListener('blur', ()=> backsound.pause());
+  window.addEventListener('focus', ()=> {if(gameStarted&&!isDead){backsound.play();}});
 </script>
 </body>
 </html>
